@@ -1,3 +1,0 @@
-"0","#| warning: false"
-"0","#| code-fold: true"
-"0","Nº_TotalEU|> filter(geo==""EU27_2020"")|> select(geo,Year,A, values)|> filter(Year>=""2007"",Year<=""2020"")|> ggplot(aes(x=Year, y=values, fill= reorder(A, -values), group=reorder(A, -values)))+geom_area()+ theme(axis.text.x = element_text(angle = 49, vjust = 1, hjust = 1))+ labs(title=""Evolución de la población de animales de granja \nen Europa (2007-2020)"", fill=""Animales"", x=""Años"",y=""Miles de cabezas"")+ theme_bw()+ theme(axis.text.x = element_text(angle = 49, vjust = 1, hjust = 1), plot.background = element_rect(fill = ""lightyellow""), plot.caption = element_text(hjust = 0, face = ""italic"", size = 6),plot.title = element_text(face = ""bold""))"

@@ -1,7 +1,0 @@
-"0","#| warning: false"
-"0","#| code-fold: true"
-"0",""
-"0","Datos_mapaES5 <- Nº_PorcinosES|> filter(is.na(Provincias), Autonomias!=""Total_Nacional"")"
-"0","mapaES5 <- mapa_ccaa|> left_join(Datos_mapaES5, by = c(""ine.ccaa.name""= ""Autonomias""))"
-"0",""
-"0","ggplot(mapaES5) + geom_sf(aes(fill = Total), color = ""black"", linewidth = 0.1) + scale_fill_continuous(low=""ivory"",high=""red4"",labels = scales::label_comma(big.mark = "".""), guide = guide_colorbar(frame.colour = ""black"", ticks.colour = ""gray57"")) + theme_void() + labs(title = ""Número de porcinos por país (2020)"", fill=""Nº de cabezas"") + theme(plot.title = element_text(face = ""bold"", size = 11))"

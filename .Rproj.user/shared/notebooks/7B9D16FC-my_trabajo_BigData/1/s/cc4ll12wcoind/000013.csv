@@ -1,7 +1,0 @@
-"0","#| warning: false"
-"0","#| code-fold: true"
-"0","#| fig-width: 3 "
-"0","#| fig-height: 2 "
-"0","Rosca <- Nº_TotalEU|>filter(geo==""EU27_2020"", Year==""2020"")|> select(A,Year, N_animal)|> mutate(Suma=sum(N_animal))|>mutate(Porcentaje=N_animal/Suma*100)"
-"0",""
-"0","hchart(Rosca, ""pie"", hcaes(x = A, y = N_animal))|>hc_plotOptions(pie = list(dataLabels = list( enabled = TRUE, format = ""{point.name}: {point.percentage:.0f}%"")))|>hc_title(text = ""Distribución porcentual de los animales de granja en la UE (2020)"")|> hc_chart(backgroundColor = ""#f0f0f0"")"

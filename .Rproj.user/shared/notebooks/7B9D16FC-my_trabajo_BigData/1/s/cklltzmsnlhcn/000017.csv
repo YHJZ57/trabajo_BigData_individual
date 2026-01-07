@@ -1,7 +1,0 @@
-"0","#| warning: false"
-"0","#| code-fold: true"
-"0",""
-"0","Datos_mapaUE6 <- Nº_bovinos|> filter(Year==""2020"", animals==""A2000"",  geo!=""EU27_2020"", month==""M12"")|> select(geo, values)"
-"0","mapaUE6 <- mapa_ue|> inner_join(Datos_mapaUE6, by = c(""id""=""geo""))"
-"0",""
-"0","ggplot(mapaUE6) + geom_sf(aes(fill = values), color = ""black"", linewidth = 0.1) + coord_sf(crs = 3035, xlim = c(2500000, 6500000), ylim = c(1500000, 5200000)) + scale_fill_continuous(low=""ivory"",high=""#30123b"",labels = scales::label_comma(big.mark = "".""), guide = guide_colorbar(frame.colour = ""black"", ticks.colour = ""gray89"")) + theme_void() + labs(title = ""Número de bovinos por país (2020)"", fill=""Miles de cabezas"") + theme(plot.title = element_text(face = ""bold"", size = 11))"

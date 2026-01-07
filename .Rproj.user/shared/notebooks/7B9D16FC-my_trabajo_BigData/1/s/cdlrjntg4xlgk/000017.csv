@@ -1,7 +1,0 @@
-"0","#| warning: false"
-"0","#| code-fold: true"
-"0",""
-"0","Datos_mapaUE7 <- Nº_Ovinos|> filter(Year==""2020"", animals==""A4100"",  geo!=""EU27_2020"")|> select(geo, values)"
-"0","mapaUE7 <- mapa_ue|> inner_join(Datos_mapaUE7, by = c(""id""=""geo""))"
-"0",""
-"0","ggplot(mapaUE7) + geom_sf(aes(fill = values), color = ""black"", linewidth = 0.1) + coord_sf(crs = 3035, xlim = c(2500000, 6500000), ylim = c(1500000, 5200000)) + scale_fill_continuous(low=""ivory"",high=""chartreuse"",labels = scales::label_comma(big.mark = "".""), guide = guide_colorbar(frame.colour = ""black"", ticks.colour = ""gray57"")) + theme_void() + labs(title = ""Número de ovinos por país (2020)"", fill=""Miles de cabezas"") + theme(plot.title = element_text(face = ""bold"", size = 11))"
