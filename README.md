@@ -1,1 +1,0 @@
-# trabajo_BigData_individual
