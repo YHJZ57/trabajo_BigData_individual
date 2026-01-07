@@ -1,0 +1,736 @@
+---
+title: "El tráfico marítimo de Colombia"
+description: |
+
+author:   
+  - Yutao Henry Jiang Zheng (yujiangz@alumni.uv.es)\n   
+  - Lucas Osejo Martínez (luomar2@alumni.uv.es)\n
+  - Javier Arnau Basagoiti Montagut (jabamon@alumni.uv.es)
+date: 2025-12-02                           #--
+categories: [trabajo BigData, Tráfico Marítimo]      #--
+image: "Directions Boat"
+title-block-banner: "imagenes/Banner_puerto.jpg"
+title-block-banner-color: "skyblue3"
+
+toc-depth: 3
+smooth-scroll: true
+format: 
+  html:
+    link-external-newwindow: true
+code-tools: true
+code-link: true
+---
+
+
+# 1. Introducción
+
+El comercio marítimo es uno de los pilares más grandes de la economía colombiana y su sistema portuario es vital para su conexión global. En este trabajo realizamos un análisis profundo sobre el tráfico que atraviesa los principales puertos del país.
+Comenzamos examinando la geografía y distribución de los puertos clave, una visualización esencial para entender la marcada asimetría entre la Costa Caribe y el Pacífico. Posteriormente, el estudio se concentra en las operaciones, detallando la tipología de las embarcaciones que llegan y la composición del cargamento que se moviliza. Finalmente, interpretamos el desempeño económico del sistema a través del análisis de las importaciones y exportaciones, y se revisa su evolución temporal para obtener una perspectiva completa de la competitividad logística de Colombia.
+
+# 2. Datos
+
+Para realizar el trabajo utiilizamos los siguientes datos:
+
+::: {.panel-tabset}
+
+## Fuente de los datos
+Los datos utilizados provienen de distintas fuentes, entre ellas la base pública “[Datos Abiertos](https://www.datos.gov.co/Transporte/Trafico-Portuario-Mar-timo-En-Colombia/5r3g-zv5z/about_data){target="_blank"}” de Colombia, la Superintendencia de Transporte ([SuperTransporte](https://www.supertransporte.gov.co/index.php/superintendencia-delegada-de-puertos/estadisticas-trafico-portuario-en-colombia/){target="_blank"}) y la Dirección General Marítima ([DIMAR](https://www.dimar.mil.co/trafico-maritimo){target="_blank"}).
+
+
+
+
+
+## Datos usados
+- df_TM_Puerto → Tráfico portuario por ciudad, incluye importaciones y exportaciones y        
+                               diferencia entre público y privado
+- df_C.Arribo → La cantidad de arribos por puerto, diferencia entre nacional e internacional
+- df_tipoBarco → Los tipos de barcos que llega a cada puerto
+- df_TipoCarga → El tipo de cargamento que llega a cada puerto 
+- df_CargaPuerto → La cantidad de movimiento de carga de cada puerto
+
+## Paquetes utilizados
+```{r}
+#| results: hide 
+#| warning: false 
+#| message: false
+
+library(tidyverse)
+library(ggplot2)
+library(rio) 
+library(janitor)
+library(ggthemes)
+library(scales)
+library(patchwork)
+library(plotly)
+library(sf)
+library(ggrepel)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(gganimate)
+library(dplyr)
+library(gifski)
+```
+
+
+## Codigo de los datos
+
+```{r}
+#| results: hide 
+#| warning: false 
+#| message: false
+
+df_TM_Puerto <- rio::import("https://www.datos.gov.co/resource/5r3g-zv5z.csv")
+df_TM_Puerto <- df_TM_Puerto|>group_by(zona_portuaria)|>mutate(Costa=case_when(zona_portuaria%in%c("BARRANCABERMEJA","Z.P. RIO MAGDALENA")~"Fluvial",zona_portuaria%in%c("BUENAVENTURA","TUMACO")~"Pacifico", .default="Caribe"))
+
+df_C.Arribo <- rio::import("https://www.dimar.mil.co/sites/default/files/noticias/E1-FOR-117-Series-Historicas-trafico-maritimo-2018-2024.xlsx", 
+                              col_names = FALSE,
+                              sheet = "Serie histórica 1",
+                              skip = 10)
+df_C.Arribo <- janitor::clean_names(df_C.Arribo)
+df_C.Arribo <- df_C.Arribo %>% tidyr::fill(x1, .direction = "down")
+df_C.Arribo <- df_C.Arribo %>% filter(!str_detect(x1, "^Subtotal") )
+df_C.Arribo <- df_C.Arribo %>% filter(!str_detect(x1, "^Total")  )
+df_C.Arribo <- df_C.Arribo %>% filter(!str_detect(x1, "^Fuente."))
+df_C.Arribo <- df_C.Arribo %>% filter(!str_detect(x1, "^Nota") )
+df_C.Arribo <- df_C.Arribo %>% filter(!str_detect(x3, "Arribo")) 
+df_C.Arribo <- df_C.Arribo %>% janitor::remove_empty("rows")
+df_C.Arribo <- df_C.Arribo %>% tidyr::fill(x2, .direction = "down")
+my_anos <- 2018:2024
+n_my_anos <- length(2018:2024)
+meses <- c("enero", "febrero", "marzo", "abril", "mayo", "junio",
+           "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+zz1 <- rep(my_anos, each = (12+1)*2) ; zz1 ; length(zz1)  
+zz2 <- rep(c("internac", "nacional"),  times = n_my_anos * ((12+1)*2)/2) ; zz2; length(zz2)
+zz3a <- rep(c(meses, "total"), each = 2) 
+zz3b <- rep(zz3a,  times = n_my_anos) ; zz3b ; length(zz3b) 
+zz4 <- paste(zz2, zz3b, zz1, sep = "_")  ; zz4; length(zz4)
+zz5 <- c("region", "puerto", zz4) ; length(zz5)
+names(df_C.Arribo) <- zz5 ; length(zz5)
+df_C.Arribo <- df_C.Arribo %>% slice(-c(1:4))
+df_C.Arribo <- df_C.Arribo %>% pivot_longer(3:length(df_C.Arribo))
+df_C.Arribo <- df_C.Arribo %>% 
+  tidyr::separate_wider_delim(col = name, 
+                              names = c("tipo", "mes", "year"), 
+                              delim = "_")
+df_C.Arribo <- df_C.Arribo %>% mutate(value = as.numeric(value))
+
+df_tipoBarco <- rio::import("https://www.dimar.mil.co/sites/default/files/noticias/E1-FOR-117-Series-Historicas-trafico-maritimo-2018-2024.xlsx", 
+                              col_names = FALSE,
+                              sheet = "Serie histórica 2",
+                              skip = 10)
+df_tipoBarco <- janitor::clean_names(df_tipoBarco)
+df_tipoBarco <- df_tipoBarco %>% tidyr::fill(x1, .direction = "down")
+df_tipoBarco <- df_tipoBarco %>% filter(!str_detect(x1, "^Subtotal") )
+df_tipoBarco <- df_tipoBarco %>% filter(!str_detect(x1, "^Total")  )
+df_tipoBarco <- df_tipoBarco %>% filter(!str_detect(x1, "^Fuente."))
+df_tipoBarco <- df_tipoBarco %>% filter(!str_detect(x1, "^Nota") )
+df_tipoBarco <- df_tipoBarco %>% janitor::remove_empty("rows")
+df_tipoBarco <- df_tipoBarco %>% tidyr::fill(x2, .direction = "down")
+my_anos <- 2018:2024
+n_my_anos <- length(2018:2024)
+meses <- c("enero", "febrero", "marzo", "abril", "mayo", "junio",
+           "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+zz1 <- rep(my_anos, each = (12)+1) ; zz1 ; length(zz1) 
+zz3a <- rep(c(meses, "total")) 
+zz3b <- rep(zz3a,  times = n_my_anos) ; zz3b ; length(zz3b) 
+zz4 <- paste( zz3b, zz1, sep = "_")  ; zz4; length(zz4)
+zz5 <- c("Actividad y Motivo de Arribo", "tipo", zz4) ; length(zz5)
+names(df_tipoBarco) <- zz5 ; length(zz5)
+df_tipoBarco <- df_tipoBarco %>% janitor::clean_names()
+df_tipoBarco <- df_tipoBarco %>% slice(-c(1:3,12))
+df_tipoBarco <- df_tipoBarco %>% pivot_longer(3:length(df_tipoBarco))
+df_tipoBarco <- df_tipoBarco %>% 
+  tidyr::separate_wider_delim(col = name, 
+                              names = c("mes", "year"), 
+                              delim = "_", too_many = "merge")
+df_tipoBarco <- df_tipoBarco %>% mutate(value = as.numeric(value))|>mutate(tipo=case_when(actividad_y_motivo_de_arribo%in%c("Reparación","Aprovisionamiento","Arribo forzoso")~"M.Arribo_Especial", .default="Actividad"))
+
+df_TipoCarga <- rio::import("https://www.dimar.mil.co/sites/default/files/noticias/E1-FOR-117-Series-Historicas-trafico-maritimo-2018-2024.xlsx", 
+                              col_names = FALSE,
+                              sheet = "Serie histórica 3",
+                              skip = 10)
+
+df_TipoCarga <- janitor::clean_names(df_TipoCarga)
+df_TipoCarga <- df_TipoCarga %>% tidyr::fill(x1, .direction = "down")
+df_TipoCarga <- df_TipoCarga %>% filter(!str_detect(x1, "^Subtotal") )
+df_TipoCarga <- df_TipoCarga %>% filter(!str_detect(x1, "^Total")  )
+df_TipoCarga <- df_TipoCarga %>% filter(!str_detect(x1, "^Fuente."))
+df_TipoCarga <- df_TipoCarga %>% filter(!str_detect(x1, "^Nota") )
+df_TipoCarga <- df_TipoCarga %>% filter(!str_detect(x3, "Arribo"))
+df_TipoCarga <- df_TipoCarga %>% janitor::remove_empty("rows")
+df_TipoCarga <- df_TipoCarga %>% slice(-1)
+puertos_Caribe <- c("Cartagena", "Santa Marta", "Barranquilla", "Urabá y del Darién", "Coveñas","Puerto Bolívar", "Riohacha", "San Andrés", "Providencia")
+puertos_Pacifico <- c( "Buenaventura", "Tumaco", "Guapi", "Bahía Solano")
+df_TipoCarga <- df_TipoCarga %>% filter( !(x2 %in% puertos_Caribe))
+df_TipoCarga <- df_TipoCarga %>% filter( !(x2 %in% puertos_Pacifico))
+puertos <- c(puertos_Caribe, puertos_Pacifico) %>% 
+  gsub(" ", "", .)
+zz_puertos <- rep(puertos, each = 9) 
+zz_puertos <- c("puerto", zz_puertos)
+df_TipoCarga <- df_TipoCarga %>% mutate(x1a = zz_puertos, .after = x1)
+df_TipoCarga[1, 3] <- "tipoBarco"
+my_anos <- 2018:2024
+n_my_anos <- length(2018:2024)
+meses <- c("enero", "febrero", "marzo", "abril", "mayo", "junio",
+           "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre")
+my_xx <- 1  #- xq no hay dif entre internacional y nacional
+zz1 <- rep(my_anos, each = (12+1)*my_xx) ; zz1 ; length(zz1) 
+zz3a <- rep(c(meses, "total"), each = 1) 
+zz3b <- rep(zz3a,  times = n_my_anos) ; zz3b ; length(zz3b) 
+zz4 <- paste(zz3b, zz1, sep = "_")  ; zz4; length(zz4)
+zz5 <- c("region", "puerto", "puertBarco", zz4) ; length(zz5)
+names(df_TipoCarga) <- zz5 ; length(zz5)
+df_TipoCarga <- df_TipoCarga %>% slice(-1)
+df_TipoCarga <- df_TipoCarga %>% pivot_longer(4:length(df_TipoCarga))
+df_TipoCarga <- df_TipoCarga %>% 
+  tidyr::separate_wider_delim(col = name, 
+                              names = c("mes", "year"), 
+                              delim = "_")
+df_TipoCarga <- df_TipoCarga %>% mutate(value = as.numeric(value))
+
+df_CargaPuerto <- rio::import("https://www.supertransporte.gov.co/documentos/2025/noviembre/Puertos_12/Historico_2017-2024.xlsx", col_names = TRUE, skip = 2)
+df_CargaPuerto <- df_CargaPuerto %>% slice(-c(13:48))|>rename("Ciudad"="FECHA - Trimestre / ZONA_PORTUARIA")|> tidyr::pivot_longer(cols = -c(Ciudad), names_to ="Trimestre", values_to = "Carga_Portuaria" )
+df_CargaPuerto <- df_CargaPuerto|>tidyr::separate_wider_delim(col = Trimestre, 
+names = c("Trimestre","year"), delim = "-")|> mutate(Costa = case_when(Ciudad %in% c("Buenaventura", "Tumaco") ~ "Pacífico", Ciudad %in% c("Barrancabermeja", "Río Magadalena") ~ "Fluvial", Ciudad %in% c("Barranquilla", "Cartagena", "Ciénaga","G. Morrosquillo", "Guajira", "San Andrés", "Santa Marta", "Turbo") ~ "Caribe"))
+
+rm(list = setdiff(ls(), c("df_TM_Puerto","df_C.Arribo","df_tipoBarco","df_TipoCarga", "df_CargaPuerto")))
+
+```
+
+:::
+
+---
+
+# 3. Mapa de los Principales Puertos
+
+Como primera etapa del análisis, y para comprender la distribución logística del país, presentamos a continuación la ubicación geoespacial de los 5 principales puertos en Colombia. Hemos generado la cartografía utilizando el paquete sf, lo que nos permite visualizar la concentración de infraestructura en la Costa Caribe frente a la dependencia de un único gran nodo en el Pacífico.
+
+
+```{r}
+#| label: mapa-puertos
+#| message: false
+#| warning: false
+#| code-fold: true
+
+library(tidyverse)
+library(sf)
+library(ggrepel)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# 1. Datos de los 5 Puertos Principales
+puertos_df <- data.frame(
+  nombre = c("Cartagena", "Santa Marta", "Barranquilla", "Puerto Bolívar", "Buenaventura"),
+  lat = c(10.3910, 11.2408, 10.9685, 12.2333, 3.8801),
+  lon = c(-75.4794, -74.1990, -74.7813, -71.9667, -77.0312),
+  zona = c("Caribe", "Caribe", "Caribe", "Caribe", "Pacífico")
+)
+
+# 2. Convertir a objeto espacial (sf)
+puertos_sf <- st_as_sf(puertos_df, coords = c("lon", "lat"), crs = 4326)
+
+# 3. Mapa base y visualización
+colombia_sf <- ne_countries(scale = "medium", returnclass = "sf", country = "Colombia")
+
+ggplot() +
+  geom_sf(data = colombia_sf, fill = "#F5F5F5", color = "gray60") +
+  geom_sf(data = puertos_sf, aes(color = zona), size = 3) +
+  geom_text_repel(data = puertos_df, aes(x = lon, y = lat, label = nombre),
+                  box.padding = 1.5) +
+  theme_bw() +
+  labs(title = "Localización de los 5 Puertos Principales",
+       x = NULL, y = NULL) +
+  theme(legend.position = "bottom")
+
+```
+
+
+# 4. Sistema portuario nacional: Un desafío Geográfico
+
+Como hemos explicado antes, Colombia tiene una ventaja competitiva única: es el único país de Sudamérica con salida a dos océanos, el **Pacífico** y el **Atlántico (Mar Caribe)**. Gracias a esto, puede comerciar fácilmente con Asia, Europa y Norteamérica.
+
+Sin embargo, hay una gran diferencia entre las dos zonas. Históricamente, los puertos no han crecido por igual: la infraestructura y el volumen de carga se han concentrado mucho en la **Costa Caribe**.
+
+### ¿Por qué existe este desequilibrio?
+La razón principal son las montañas. Como vemos en el mapa, la **Cordillera de los Andes** cruza el país de sur a norte y se divide en tres ramas.
+
+Estas montañas (en marrón oscuro) funcionan como un muro natural que deja aislada a la **Costa Pacífica** del centro del país donde están las ciudades más importantes (Bogotá, Medellín, Cali).
+
+En cambio, hacia el norte las montañas bajan y se vuelven llanuras (en verde). Esto hace que sea mucho más fácil llegar a la **Costa Caribe** por carretera o por el río Magdalena. Por eso, el Caribe siempre ha sido la entrada y salida principal de Colombia.
+
+---
+
+```{r}
+#| label: imagen-relieve-andes 
+#| code-fold: true 
+#| fig-cap: "Mapa físico de Colombia. Se observa claramente cómo las tres cordilleras andinas bloquean el acceso al Pacífico, mientras que el Caribe es más llano y accesible." 
+#| fig-align: "center" #Para centrar la imagen
+#| out-width: "70%"  
+# Usamos knitr para mostrar la imagen directamente desde Wikimedia 
+knitr::include_graphics("https://upload.wikimedia.org/wikipedia/commons/8/8a/Colombia_relief_location_map_cropped.svg")
+```
+
+---
+
+
+En esta fotografía podemos observar cómo los Andes aíslan el océano Pacífico.
+
+![Relieve de Colombia: La barrera natural de los Andes aísla el Pacífico. (Fuente: Wikimedia Commons)](https://upload.wikimedia.org/wikipedia/commons/d/d4/%C3%81rea_Cultural_Andina_-_Divisi%C3%B3n.PNG){fig-align="center"}
+
+
+
+El sistema se divide en **Zonas Portuarias** con funciones distintas:
+* **Región Caribe:** Es la que mueve más variedad de productos. Aquí están **Cartagena** (contenedores y turismo), **Santa Marta** (carbón) y **Barranquilla** (funciona como puerto de río y marítimo).
+* **Región Pacífico:** Su punto fuerte es **Buenaventura**. Es esencial para traer mercancía de Asia, aunque es difícil llegar allí por tierra.
+* **Región Fluvial:** Se centra en **Barrancabermeja**, clave para transportar petróleo hacia la refinería.
+
+
+## 4.1. Análisis Gráfico y Exploratorio
+Ahora, vamos a analizar los datos que hemos preparado para comprobar lo que dijimos antes y entender cómo funciona el tráfico marítimo actualmente.
+
+### 4.1.1. Evolución del volumen de carga (Top Puertos)
+
+Primero, analizamos la tendencia en el tiempo. Como hay muchas zonas pequeñas que podrían desordenar el gráfico, hemos filtrado los datos para ver sólo los **6 puertos más importantes** según volumen histórico. Queremos ver si el tráfico ha subido después de la pandemia y qué puertos son los líderes.
+
+
+```{r}
+#| warning: false 
+#| message: false 
+# 1. Preparación de los datos
+df_grafico1 <- df_CargaPuerto %>%
+mutate(year = as.numeric(year)) %>% # Aseguramos que el año sea numérico para el eje X 
+# Calculamos el total histórico por ciudad para saber cuáles son los "grandes" group_by(Ciudad) %>%
+mutate(total_historico = sum(Carga_Portuaria, na.rm = TRUE)) %>%
+ungroup()
+# 2. Filtro: Nos quedamos solo con los nombres del Top 6
+top_puertos <- unique(df_grafico1 %>% arrange(desc(total_historico)) %>% pull(Ciudad))[1:6]
+# Filtramos la base de datos original para mantener solo esas ciudades top
+df_grafico1 <- df_grafico1 %>% filter(Ciudad %in% top_puertos)
+# 3. Sumamos la carga por año y ciudad 
+df_grafico1 <- df_grafico1 %>% 
+group_by(year, Ciudad) %>%
+summarise(Carga = sum(Carga_Portuaria, na.rm = TRUE), .groups = 'drop')
+
+```
+
+---
+Vemos la evolución temporal con un gráfico de líneas, que es donde mejor se va a ver la serie de tiempo:
+---
+
+```{r}
+#| warning: false
+#| code-fold: true
+#- Gráfico de líneas
+p <- ggplot(data = df_grafico1, 
+mapping = aes(x = year, y = Carga, color = Ciudad)) + 
+geom_line(linewidth = 1) + # Línea un poco más gruesa para visibilidad
+geom_point(size = 2) + # Puntos para marcar cada año
+scale_y_continuous(labels = scales::label_number(scale = 1e-6, suffix = " M")) + # Formato Millones
+theme_minimal() # Tema limpio
+
+p + labs(title = "Evolución de carga (Top 6 Puertos)",
+subtitle = "Toneladas que se mueven anualmente", 
+y = "Millones de Toneladas", 
+color = "Zona Portuaria") 
+```
+
+
+   
+### 4.1.2. Comparativa: Caribe vs Pacífico
+
+Para comprobar si es verdad que el Caribe domina por la barrera de los Andes, comparamos directamente el volumen de carga del último año completo (2023).
+
+Para eso agrupamos manualmente las ciudades en sus regiones geográficas:
+
+```{r}
+#| warning: false
+#| code-fold: true 
+
+# 1. Clasificación Geográfica 
+df_grafico2 <- df_CargaPuerto %>%
+mutate(year = as.numeric(year)) %>%
+filter(year == 2023) %>% 
+# Creamos la columna 'Region' 
+mutate(Region = case_when
+( Ciudad %in% c("Buenaventura", "Tumaco") ~ "Pacífico",
+Ciudad %in% c("Barrancabermeja", "Río Magdalena") ~ "Fluvial",
+TRUE ~ "Caribe"   )) %>% # El resto (Cartagena, etc.) asumimos que son Caribe 
+
+# 2. Sumamos el total por región
+group_by (Region) %>%
+summarise(Total = sum(Carga_Portuaria, na.rm = TRUE)) %>%
+
+# Calculamos el porcentaje para entender la proporción
+  mutate(Porcentaje = Total / sum(Total))
+  
+
+```
+
+---
+Hacemos el gráfico de barras, que confirma la teoria:
+---
+
+```{r}
+#| warning: false
+#| code-fold: true
+#Gráfico de barras
+p <- ggplot(df_grafico2, aes(x = reorder(Region, -Total), y = Total, fill = Region)) + geom_col() + 
+  
+# Añadimos etiquetas de texto con el porcentaje encima de las barras
+  geom_text(aes(label = scales::percent(Porcentaje, accuracy = 1)),
+vjust = -0.5, fontface = "bold") + 
+scale_y_continuous(labels = scales::label_number(scale = 1e-6, suffix = " M")) + scale_fill_manual(values = c("Caribe"="blue", "Pacífico"="orange", "Fluvial"="green")) + theme_light() 
+
+p + labs(title = "Distribución de Carga por Región (2023)",
+subtitle = "Predominio claro de la costa Caribeña", 
+x = "Región", 
+y = "Total Toneladas") + 
+theme(legend.position = "none")
+```
+
+---
+
+
+Se ve claramente que el Caribe mueve la mayor parte de la carga del país. Esto confirma que la barrera de los Andes frena el crecimiento de la región Pacífico.
+
+### 4.1.3. Naturaleza del Tráfico: Nacional o Internacional?
+
+Es imprescindible distinguir el propósito de los buques que arriban. ¿Son barcos grandes que traen mercancía de otros países (Comercio Exterior) o barcos más pequeños que se mueven solo entre puertos de Colombia (Cabotaje)?
+
+```{r}
+#| warning: false
+#| code-fold: true
+# Agrupar datos
+# Agrupación simple por año y tipo de tráfico
+df_grafico3 <- df_C.Arribo %>%
+mutate(year = as.numeric(year)) %>%
+group_by(year, tipo) %>%
+summarise(Total = sum(value, na.rm = TRUE), .groups = 'drop')
+```
+
+
+
+Y el gráfico:
+
+```{r}
+#| warning: false
+#| code-fold: true
+#- Gráfico de barras 
+p <- ggplot(df_grafico3, aes(x = factor(year), y = Total, fill = tipo)) + 
+# 'dodge' coloca las barras una al lado de la otra para comparar mejor
+geom_col(position = "dodge") + 
+scale_fill_manual(values = c("blue", "red"), labels = c("Internacional", "Nacional")) + 
+theme_minimal() 
+
+p + labs(title = "Arribos de Buques: Nacional vs Internacional", 
+x = "Año", 
+y = "Número de Arribos", 
+fill = "Tipo de Tráfico")
+```
+
+
+Con esto terminamos el análisis de los puertos colombianos.
+
+
+---
+
+# 5. Tipos de barcos que llegan
+
+Colombia, como país bioceánico, recibe todo tipo de barcos, siendo la mayoría de ellos de origen nacional, como podemos observa en el gráfico. Entre 2018 y 2023 se registró un aumento sostenido en el número de embarcaciones que arribaron a los puertos colombianos. La disminución observada en 2024 no corresponde a una caída real del tráfico marítimo, sino que se debe a la falta de información del último trimestre del año en la base de datos utilizada.
+
+Dentro de esta tendencia creciente, destaca el incremento registrado a partir de 2021, explicado por la rápida recuperación económica posterior a la pandemia y por la necesidad de fortalecer una flota logística local, proceso que estuvo fuertemente influenciado por los cuellos de botella en las cadenas de suministro. No obstante, este cambio ya venía gestándose desde años anteriores, ya que en 2018 la presencia de barcos nacionales e internacionales era prácticamente equivalente; sin embargo, a partir de 2019 comenzó a evidenciarse una modificación progresiva en esta proporción, con un aumento constante de las embarcaciones nacionales, tendencia que se intensificó desde 2020 y consolidó la predominancia de la flota nacional en los años posteriores.
+
+
+```{r}
+#| code-fold: true
+R.NacInt <- df_C.Arribo|> group_by(year)|>filter(mes=="total")|> ggplot(aes(x=year, y=value, fill = tipo ))+geom_col()+theme_bw()+scale_y_continuous(labels = label_comma(accuracy = 1))+
+  theme(panel.background = element_rect(fill = "lightyellow", color = NA))+labs(title="Evolución de la procedencia de barcos que llegan a \npuertos colombianos (2018-2024)", x="Años",y="Arribos", fill="Tipo" )+ scale_fill_discrete(name = "Tipo de Navegación",  labels = c( "internac" = "Tráfico Internacional","nacional"= "Tráfico Nacional"))
+R.NacInt
+
+```
+
+La mayoría de estos barcos arriban principalmente a los puertos del Atlántico. Como se observa en la siguiente gráfica, correspondiente a los barcos arribados en 2024, los puertos del Atlántico reciben un mayor número de embarcaciones tanto nacionales como internacionales, lo que corrobora la afirmación de que la costa caribeña presenta una mayor actividad portuaria que la costa pacífica.
+
+```{r}
+#| warning: false
+#| code-fold: true
+R.NacInt <- df_C.Arribo|> filter(year=="2024",mes=="total")|> ggplot(aes(x=region, y=value, fill = tipo ))+geom_col()+theme_bw()+ theme(panel.background = element_rect(fill = "lightyellow", color = NA))+labs(title="Procedencia de barcos que llegan a puertos colombianos en el 2024", x="Años",y="Arribos", fill="Tipo" )+scale_fill_discrete(name = "Tipo de Navegación",  labels = c( "internac" = "Tráfico Internacional","nacional"= "Tráfico Nacional"))
+R.NacInt
+```
+
+En particular, el tráfico marítimo de la costa caribeña se concentra en los puertos de Cartagena, Santa Marta y Coveñas, los cuales ocupan el primer, segundo y tercer lugar, respectivamente, entre los puertos con mayor recepción de embarcaciones. En contraste, en la costa pacífica el puerto de Buenaventura presenta el mayor flujo de barcos y se ubica en el cuarto lugar a nivel nacional en tráfico portuario.
+
+```{r}
+#| warning: false
+#| code-fold: true
+library(patchwork)
+NacInt <- df_C.Arribo|> filter(year=="2024")|> ggplot(aes(x=puerto, y=value, fill = tipo ))+geom_col()+theme_bw()+theme(axis.text.x = element_text( angle = 60, hjust = 1)) +theme(panel.background = element_rect(fill = "lightyellow", color = NA))+ labs(title="Procedencia de barcos que llegan a cada puertos colombianos en el 2024", x="Años",y="Arribos", fill="Tipo" )+scale_fill_discrete(name = "Tipo de Navegación",  labels = c( "internac" = "Tráfico Internacional","nacional"= "Tráfico Nacional"))
+tablaarribo <-df_C.Arribo|>filter(year=="2024",tipo=="nacional", mes=="enero")|>select(region,puerto)
+DT::datatable(tablaarribo)
+NacInt
+
+```
+
+De los barcos que llegan, la mayoría son buques de carga, seguidos, a gran distancia, por embarcaciones recreativas. La pandemia provocó una caída significativa en la llegada de buques recreacionales, pero a partir de 2022 se observa una recuperación.
+En 2024 se aprecia una disminución general en todos los tipos de barcos, lo cual se debe a que la base de datos consultada no incluía información del último trimestre del año, como mencionamos anteriormente.
+
+```{r}
+#| warning: false
+#| code-fold: true
+R.TipoBarco <- df_tipoBarco|>group_by(year)|>filter(tipo=="Actividad")|> ggplot(aes(x=year,y=value,fill = actividad_y_motivo_de_arribo))+geom_col()+scale_fill_brewer(palette = "Set1")+
+  labs(title = "Tipo de barcos que arriban a puertos colombianos (2018-2024)", x="Años",y="Arribos", fill = "Tipo de barco")+theme_bw()+theme(panel.background = element_rect(fill = "lightblue3", colour = "white"))
+R.TipoBarco
+```
+
+Algunos barcos llegan a Colombia por motivos especiales, es decir, por razones distintas al comercio regular; principalmente por aprovisionamiento, como se puede observar en la gráfica.
+
+```{r}
+#| warning: false
+#| code-fold: true
+R.ActiviadBarco <- df_tipoBarco|>group_by(year)|>filter(tipo=="M.Arribo_Especial")|> ggplot(aes(x=year,y=value,fill = actividad_y_motivo_de_arribo))+geom_col()+theme_bw()+theme(panel.background = element_rect(fill = "lightyellow1", colour = "white"))+labs(title="Motivos de arribo especiales a puertos colombianos (2018-2024)", x="Años",y="Arribos",fill="Motivos de arribo especiales")
+R.ActiviadBarco
+```
+
+
+---
+
+## 5.1 Tipo de barcos de carga que llegan a puertos colombianos
+
+Los barcos de carga que arriban a los puertos colombianos están compuestos principalmente por portacontenedores, seguidos por graneleros y tanqueros. Esto se debe a que los portacontenedores son fundamentales para el transporte de mercancía general y bienes manufacturados, como la exportación de café, una de las principales exportaciones del país, así como la importación de diversos bienes. En el caso de los graneleros, su presencia responde a la exportación de minerales, como el carbón y el hierro, y a la importación de alimentos, como cereales, además de otros insumos, entre ellos los fertilizantes. Por su parte, la llegada de tanqueros se explica porque Colombia es un importante productor de petróleo.
+
+```{r}
+#| warning: false
+#| code-fold: true
+Categoria <- df_TipoCarga|>group_by(year)|>filter(mes=="total")|>ggplot(aes(x=year,y=value, fill = puertBarco))+geom_col()+labs(title = "Tipos de barcos de carga que llegan a Colombia (2018-2024)",x="Años",y="Arribos",fill="Tipo de cargero")+scale_fill_brewer(palette = "Set3")+theme(panel.background = element_rect(fill = "lightblue4", colour = "white"))
+Categoria 
+```
+
+### 5.1.1. Tipo de barcos de carga que llegan a puertos colombianos por costa
+
+En la siguiente gráfica se puede observar que, en 2023, la costa atlántica recibió una mayor cantidad de barcos de carga de todos los tipos, lo que respalda el argumento de que la costa pacífica tiene un menor movimiento portuario en comparación con la costa caribeña.
+
+```{r}
+#| warning: false
+#| code-fold: true
+Categoria <- df_TipoCarga|>group_by(region)|>filter(mes=="total", year=="2023")|>ggplot(aes(x=region,y=value, fill = puertBarco))+geom_col(position = "dodge")+labs(title = "Tipos de barcos de carga que llegan a Colombia (2023)",x="Costa",y="Arribos",fill="Tipo de cargero")+scale_fill_brewer(palette = "Set3")+theme(panel.background = element_rect(fill = "lightblue4", colour = "white"))+annotate("rect",xmin = 1.5, xmax = 2.5,ymin = -Inf, ymax = Inf,alpha = 0.2, fill = "red")+ annotate("rect",xmin = 0.5, xmax = 1.5,ymin = -Inf, ymax = Inf,alpha = 0.2, fill = "green2")
+           
+Categoria
+```
+---
+
+# 6. Evolución de la carga portuario
+
+::::: columns
+::: {.column width="35%"}
+```{r}
+#| code-fold: true
+#| warning: false
+#| fig-width: 4 
+#| fig-height: 3 
+Traf.Marit <- df_CargaPuerto|>group_by(year)|>mutate(Traf_anual=sum(Carga_Portuaria))|> filter(Trimestre=="Trim. 4 ", Ciudad%in%c("Barrancabermeja"))|>mutate(year = as.numeric(as.character(year)))|> select(year,Traf_anual)|> ggplot(aes(x=year,y=Traf_anual,group = 1))+geom_line(color="blue3", size=1.2)+geom_point(size=2.5, color= "firebrick3")+theme_bw() +scale_y_continuous(labels = label_comma(accuracy = 1))+theme(panel.background = element_rect(fill = "lightblue4", colour = "white"))+labs(title="Carga portuaria en Colombia 17-24",x="Años",y="Movimiento de carga")
+Traf.Marit <- Traf.Marit+transition_reveal(year)
+Traf.Marit
+```
+:::
+
+::: {.column width="65%"}
+El movimiento de carga portuaria en Colombia experimentó una caída entre 2018 y 2020, con una disminución particularmente pronunciada en 2019 debido a la pandemia. A partir de 2020, la actividad portuaria comenzó a recuperarse; sin embargo, en 2022 volvió a disminuir como consecuencia de la inflación mundial y la guerra en Ucrania, que encareció el transporte marítimo. A partir de finales de 2022, se registró una rápida recuperación del movimiento portuario, impulsada por la recuperación económica global y las sequías en el Canal de Panamá, que obligaron a varios barcos a dirigirse a puertos colombianos.
+:::
+Se estima que el tráfico de carga en Colombia podría disminuir en 2025 debido al Fenómeno del Niño, que aumenta los riesgos de navegación en ciertos meses del año y afecta la seguridad portuaria. Además, este fenómeno meteorológico podría reducir la cosecha de café, una de las principales exportaciones del país junto con el petróleo. La exportacion de crudo también podría verse afectada, debido al incremento en la producción de petróleo en Estados Unidos, principal comprador del crudo colombiano, impulsado por las políticas extractivas de la administración de Trump y a la disminución de precios de la OPEP+, lo que hace que el petróleo colombiano sea menos competitivo en el mercado internacional.
+
+```{r}
+#| warning: false
+#| code-fold: true
+
+Traf.Marit <- df_CargaPuerto|>group_by(year)|>mutate(Traf_anual=sum(Carga_Portuaria))|> filter(Trimestre=="Trim. 4 ", Ciudad%in%c("Barrancabermeja"))|>mutate(year = as.numeric(as.character(year)))|> select(year,Traf_anual)|> ggplot(aes(x=year,y=Traf_anual,group = 1))+geom_line(color="blue3", size=1.2)+geom_point(size=2.5, color= "firebrick3")+theme_bw() +scale_y_continuous(labels = label_comma(accuracy = 1))+theme(panel.background = element_rect(fill = "lightblue4", colour = "white"))+labs(title="Evolución de la carga portuario en puertos colombianos (2017-2024)",x="Años",y="Movimiento de carga")
+
+Traf.Marit
+```
+
+## 6.1. Contribucion por costa en la carga portuaria
+
+El movimiento de carga portuaria en Colombia se concentra principalmente en la costa atlántica, seguidas por la costa pacífica y los puertos fluviales. Esto se explica porque la población y la actividad económica del país se concentran en la región central y en la costa caribe, y estas zonas cuentan con mejores conexiones hacia el Atlántico. En contraste, la zona pacífica ha permanecido históricamente aislada debido a la presencia de la cordillera de los Andes.
+
+Por su parte, los puertos fluviales mantienen su nivel de movimiento principalmente por la ciudad de Barrancabermeja, que alberga la refinería de petróleo más grande de Colombia y se encuentra cerca del yacimiento de petróleo del Magdalena Medio. Además, su ubicación en el río Magdalena, que desemboca en el Caribe, facilita el transporte de carga desde esta región, aunque su navegabilidad no es constante durante todo el año, lo que limita parcialmente el flujo portuario.
+
+```{r}
+#| warning: false
+#| code-fold: true
+Traf.Marit <- df_CargaPuerto|>group_by(year, Costa)|>mutate(Traf_anual=sum(Carga_Portuaria))|> filter(Trimestre=="Trim. 4 ")|> ggplot(aes(x=year,y=Traf_anual, fill = Costa))+geom_col()+scale_y_continuous(labels = label_comma(accuracy = 1))+theme_bw()+ labs(title="Contribucion por costa en la evolución de la carga portuaria \nen puertos colombianos (2017-2024)",x="Años",y="Movimiento de carga")+theme(panel.background = element_rect(fill = "lightyellow1", colour = "white"))
+Traf.Marit
+```
+---
+
+# 7. Exportaciones e Importaciones
+
+Para este apartado nos centraremos en el dataframe `df_TM_Puerto`, que contiene los datos de tonelaje desglosados por tipo de movimiento; a partir de él generamos el gráfico en el que se puede ver la diferencia entre importaciones y exportaciones marítimas del país .
+
+**Evolución de la Balanza Comercial (Interactiva)**
+
+```{r}
+#| label: grafico-balance-anual-interactivo
+#| code-fold: true
+#| warning: false
+#| message: false
+#| fig-cap: "Evolución Interactiva de las Toneladas Exportadas vs. Importadas"
+#| fig-width: 4 
+#| fig-height: 3
+library(plotly) 
+
+# 1. CREACIÓN Y LIMPIEZA DE df_comercio (a partir df_TM_Puerto)
+df_comercio <- df_TM_Puerto %>% 
+  select(zona_portuaria, anno_vigencia, exportacion, importacion) %>%
+  rename(Year = anno_vigencia, Zona = zona_portuaria) %>%
+  
+  # Convertir las columnas 'exportacion' e 'importacion' en filas
+  pivot_longer(
+    cols = c(exportacion, importacion),
+    names_to = "Movimiento",
+    values_to = "Total_Ton"
+  ) %>%
+  # eliminamos NAs
+  filter(!is.na(Total_Ton), Total_Ton > 0)
+
+# 2. CREACIÓN DEL DATAFRAME NECESARIO (df_evolucion_comercio)
+df_evolucion_comercio <- df_comercio %>%
+  group_by(Year, Movimiento) %>%
+  summarise(Total_Ton = sum(Total_Ton, na.rm = TRUE)) %>%
+  ungroup()
+
+# 3. Crear el gráfico base con ggplot
+p_base_balanza <- ggplot(df_evolucion_comercio, aes(x = Year, y = Total_Ton, color = Movimiento,
+                                                text = paste("Año:", Year, "<br>",
+                                                             "Movimiento:", Movimiento, "<br>",
+                                                             "Toneladas:", scales::label_comma()(Total_Ton)))) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 3) +
+  scale_y_continuous(labels = scales::label_comma(scale = 1e-6, suffix = " M")) +
+  scale_color_manual(values = c("exportacion" = "blue", "importacion" = "red")) +
+  theme_minimal() +
+  labs(title = "Evolución Exportaciones vs Importaciones",
+       subtitle = "Volumen en Millones de Toneladas por Año",
+       y = "Millones de Toneladas",
+       x = "Año",
+       color = "Flujo") +
+  theme(legend.position = "bottom")
+
+# 4. Convertir a Plotly para hacerlo interactivo
+ggplotly(p_base_balanza, tooltip = "text") %>%
+  layout(hovermode = "x unified")
+```
+
+
+* **Especialización Portuaria Interactiva: ¿Quién Exporta y Quién Importa?**
+
+Identificamos los puertos que lideran cada actividad, observando dónde se concentra 
+la mayor actividad exportadora e importadora del país.
+
+
+```{r}
+#| label: grafico-top-puertos-interactivo
+#| code-fold: true
+#| warning: false
+#| message: false
+#| fig-cap: "Top 5 Zonas Portuarias Interactivas: Perfil Exportador vs. Importador"
+#| fig-width: 4 
+#| fig-height: 3
+
+# 1. CREACIÓN Y LIMPIEZA DE df_comercio 
+df_comercio <- df_TM_Puerto %>%
+  select(zona_portuaria, anno_vigencia, exportacion, importacion) %>%
+  rename(Year = anno_vigencia, Zona = zona_portuaria) %>%
+  pivot_longer(
+    cols = c(exportacion, importacion),
+    names_to = "Movimiento",
+    values_to = "Total_Ton"
+  ) %>%
+  mutate(Total_Ton = as.numeric(Total_Ton)) %>%
+  filter(!is.na(Total_Ton), Total_Ton > 0)
+
+# 2. CREACIÓN DEL DATAFRAME NECESARIO (df_puertos_ranking)
+df_puertos_ranking <- df_comercio %>%
+  group_by(Zona, Movimiento) %>%
+  summarise(Total_Ton = sum(Total_Ton, na.rm = TRUE)) %>%
+  ungroup()
+
+# 3. Sacar el Top 5 general (sumando todo)
+top_5_zonas <- df_puertos_ranking %>%
+  group_by(Zona) %>%
+  summarise(Grand_Total = sum(Total_Ton)) %>%
+  arrange(desc(Grand_Total)) %>%
+  head(5) %>%
+  pull(Zona)
+
+# 4. Crear el gráfico con ggplot
+p_base_puertos <- df_puertos_ranking %>%
+  filter(Zona %in% top_5_zonas) %>%
+  ggplot(aes(x = Total_Ton, 
+             y = reorder(Zona, Total_Ton), 
+             fill = Movimiento,
+             text = paste("Puerto:", Zona, "<br>",
+                          "Flujo:", Movimiento, "<br>",
+                          "Volumen:", scales::label_comma()(Total_Ton)))) +
+  geom_col(position = "dodge") + 
+  scale_x_continuous(labels = scales::label_comma(scale = 1e-6, suffix = " M")) +
+  scale_fill_manual(values = c("exportacion" = "blue", "importacion" = "red")) +
+  theme_minimal() +
+  labs(title = "Top 5 Zonas Portuarias: Perfil Exportador vs Importador",
+       subtitle = "Acumulado histórico (Toneladas)",
+       x = "Millones de Toneladas",
+       y = "Zona Portuaria",
+       fill = "Flujo")
+
+# 5. Convertir a Plotly para hacerlo interactivo
+ggplotly(p_base_puertos, tooltip = "text") %>%
+  layout(yaxis = list(title = "Zona Portuaria"))
+
+```
+
+**Conclusión Económica**
+
+**Balanza Comercial, Flujos y Desafíos Estructurales**
+
+Los datos analizados permiten extraer conclusiones fundamentales sobre la economía portuaria y las dinámicas comerciales de Colombia: como se observa en el primer gráfico, la línea de Exportaciones (Azul) se mantiene consistentemente por encima de la de Importaciones (Roja) en términos de volumen físico (toneladas).
+
+* **Interpretación:** Colombia es un país que, físicamente, envía al exterior mucha más materia de la que recibe. Esto es típico de economías basadas en commodities (carbón y petróleo), que son mercancías muy pesadas y voluminosas.
+
+* **La "Ilusión" del Valor:** Es importante notar que, aunque Colombia exporta más toneladas, esto no significa que gane más dinero de lo que lo que gasta. Colombia exporta toneladas de carbón (barato por kilo) e importa contenedores con tecnología y manufacturas (caras por kilo).
+
+—
+
+**Especialización Portuaria**
+
+El gráfico de barras muestra una clara división del trabajo entre las zonas portuarias, reflejando su especialización económica:
+
+* **Puertos Exportadores de Materias Primas:** Puertos como Ciénaga o Guajira (Puerto Bolívar) son casi exclusivamente exportadores (salida de carbón). Su función está ligada directamente a la demanda energética global.
+
+* **Puertos Mixtos/Importadores:** Puertos como Buenaventura y Cartagena tienen un perfil más mixto o importador, siendo vitales para el abastecimiento interno del país (seguridad alimentaria y bienes de consumo).
+
+---
+
+* **Resumen económico del apartado**
+
+La salud del tráfico marítimo colombiano depende fuertemente de la demanda internacional de materias primas energéticas, lo cual asegura el volumen de exportación. Al mismo tiempo, el consumo interno sigue dependiendo de la eficiencia de los puertos del Caribe y Pacífico para traer productos manufacturados del exterior, lo cual se traduce en una dependencia estructural de las importaciones de alto valor.
+
+# 8. Conclusión
+
+Tras este análisis del tráfico marítimo colombiano confirmamos una estructura logística asimétrica, marcada por la dualidad entre la Costa Caribe y el Pacífico. El estudio geográfico validó la predominancia de la Costa Caribe como el principal centro portuario, mientras que el Pacífico depende críticamente de Buenaventura. Operacionalmente, se demostró que la mayoría de los arribos de buques son de tráfico nacional, y la composición de la flota se concentra en portacontenedores, graneleros y tanqueros, reflejando la especialización de la economía en commodities pesados y el manejo de contenedores.
+En términos de actividad económica, el sistema mostró que las exportaciones superan a las importaciones en volumen físico (toneladas), una característica esperable de una economía productora de materias primas. Sin embargo, esta actividad está sujeta a la volatilidad del mercado global, como se observó en la evolución temporal del tráfico, sensible a eventos como la pandemia y las crisis de precios. En definitiva, la resiliencia del sistema depende de la eficiencia de los puertos del Caribe para gestionar grandes volúmenes y la mitigación del riesgo en la conexión terrestre de la Costa Pacífica.
+
+# 9. Biografia 
+
+- Ministerio de Transporte de Colombia. (s.f.). Tráfico Portuario Marítimo en Colombia. Datos Abiertos Colombia. Recuperado de https://www.datos.gov.co/Transporte/Trafico-Portuario-Mar-timo-En-Colombia/5r3g-zv5z/about_data
+
+- Dirección General Marítima de Colombia (Dimar). (s.f.). Tráfico marítimo. Portal Marítimo Colombiano. Recuperado de https://www.dimar.mil.co/trafico-maritimo
+
+- Superintendencia de Transporte de Colombia. (s.f.). Estadísticas de Tráfico Portuario en Colombia. Supertransporte. Recuperado de https://www.supertransporte.gov.co/index.php/superintendencia-delegada-de-puertos/estadisticas-trafico-portuario-en-colombia/
+
+- Milenioscuro. (2022). Mapa de Colombia (topografía) [Mapa]. Wikimedia Commons. https://commons.wikimedia.org/w/index.php?curid=115522497
+
+- Eniol. (2013). Área Cultural Andina – División [Mapa]. Wikimedia Commons. https://commons.wikimedia.org/w/index.php?curid=25366386
+
+
+
+
+
+

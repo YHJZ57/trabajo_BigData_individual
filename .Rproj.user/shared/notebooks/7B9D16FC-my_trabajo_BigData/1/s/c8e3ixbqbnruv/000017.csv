@@ -1,0 +1,7 @@
+"0","#| warning: false"
+"0","#| code-fold: true"
+"0",""
+"0","Datos_mapaUE8 <- Nº_Porcinos|> filter(Year==""2020"", animals==""A3100"",  geo!=""EU27_2020"")|> select(geo, values)"
+"0","mapaUE8 <- mapa_ue|> inner_join(Datos_mapaUE8, by = c(""id""=""geo""))"
+"0",""
+"0","ggplot(mapaUE8) + geom_sf(aes(fill = values), color = ""black"", linewidth = 0.1) + coord_sf(crs = 3035, xlim = c(2500000, 6500000), ylim = c(1500000, 5200000)) + scale_fill_continuous(low=""ivory"",high=""red4"",labels = scales::label_comma(big.mark = "".""), guide = guide_colorbar(frame.colour = ""black"", ticks.colour = ""gray89"")) + theme_void() + labs(title = ""Número de porcinos por país (2020)"", fill=""Miles de cabezas"") + theme(plot.title = element_text(face = ""bold"", size = 11))"

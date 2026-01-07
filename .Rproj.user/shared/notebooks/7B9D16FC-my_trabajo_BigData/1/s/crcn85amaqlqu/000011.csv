@@ -1,0 +1,7 @@
+"0","#| warning: false"
+"0","#| code-fold: true"
+"0",""
+"0","Datos_mapaES4 <- Nº_OvinosES|> filter(is.na(Provincias), Autonomias!=""Total_Nacional"")"
+"0","mapaES4 <- mapa_ccaa|> left_join(Datos_mapaES4, by = c(""ine.ccaa.name""= ""Autonomias""))"
+"0",""
+"0","ggplot(mapaES4) + geom_sf(aes(fill = Total), color = ""black"", linewidth = 0.1) + scale_fill_continuous(low=""ivory"",high=""chartreuse"",labels = scales::label_comma(big.mark = "".""), guide = guide_colorbar(frame.colour = ""black"", ticks.colour = ""gray57"")) + theme_void() + labs(title = ""Número de ovinos por país (2020)"", fill=""Nº de cabezas"") + theme(plot.title = element_text(face = ""bold"", size = 11))"

@@ -1,0 +1,7 @@
+"0","#| warning: false"
+"0","#| code-fold: true"
+"0",""
+"0","Datos_mapaUE5 <- Nº_TotalEU|> filter(Year==""2020"", Tipo==""Pais"", A==""Aves de corral"")|> select(geo, values)"
+"0","mapaUE5 <- mapa_ue|> inner_join(Datos_mapaUE5, by = c(""id""=""geo""))"
+"0",""
+"0","ggplot(mapaUE5) + geom_sf(aes(fill = values), color = ""black"", linewidth = 0.1) + coord_sf(crs = 3035, xlim = c(2500000, 6500000), ylim = c(1500000, 5200000)) + scale_fill_continuous(low=""ivory"",high=""skyblue4"",labels = scales::label_comma(big.mark = "".""), guide = guide_colorbar(frame.colour = ""black"", ticks.colour = ""gray89"")) + theme_void() + labs(title = ""Número de aves de corral por país (2020)"",fill=""Miles de cabezas"") + theme(plot.title = element_text(face = ""bold"", size = 11))"

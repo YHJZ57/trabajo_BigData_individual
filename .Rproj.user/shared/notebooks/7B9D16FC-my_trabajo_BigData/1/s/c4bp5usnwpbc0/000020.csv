@@ -1,0 +1,6 @@
+"0","#| warning: false"
+"0","#| code-fold: true"
+"0",""
+"0","mapa_ccaa <- esp_get_ccaa()"
+"0","mapaES <- mapa_ccaa|> left_join(RoscaES1, by = c(""ine.ccaa.name""= ""Autonomias""))"
+"0","ggplot(mapaES) + geom_sf(aes(fill = TotalA), color = ""black"", size = 0.2) + scale_fill_continuous(low=""ivory"", high=""darkgreen"",labels = scales::label_comma(big.mark = "".""), guide = guide_colorbar(frame.colour = ""black"", ticks.colour = ""gray57"")) + theme_void() + labs(title = ""Censo Ganadero por Comunidad Autónoma (2020)"", fill=""Nº de cabezas"") + theme(plot.title = element_text(face = ""bold"", size = 11))"

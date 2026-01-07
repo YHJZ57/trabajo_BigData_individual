@@ -1,0 +1,6 @@
+"0","#| warning: false"
+"0","#| code-fold: true"
+"0"," "
+"0","Datos_mapaES1 <- Nº_TotalES|> filter(is.na(Provincias), Autonomias!=""Total_Nacional"")|> group_by(Autonomias)|> slice_max(Total, n = 1)"
+"0","mapaES1 <- mapa_ccaa|> left_join(Datos_mapaES1, by = c(""ine.ccaa.name""= ""Autonomias""))"
+"0","ggplot(mapaES1) + geom_sf(aes(fill = Animal), color = ""white"", linewidth = 0.1) + scale_fill_manual(values = c(""Ovinos"" = ""chartreuse"",""Bovinos"" =""#30123b"",""Porcinos""=""red4"", ""Aves de corral""=""skyblue4""))+ theme_void() + labs(title = ""Animal de granja más numeroso por comunidad autonóma (2020)"", fill=""Especie Mayoritaria"") + theme(plot.title = element_text(face = ""bold"", size = 11))"
